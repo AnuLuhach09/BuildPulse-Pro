@@ -1,0 +1,136 @@
+version: '3.9'
+
+# =============================================================================
+# BuildPulse Pro – Docker Compose
+# Development environment with hot-reload for backend and frontend
+# =============================================================================
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: buildpulse_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: buildpulse
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: buildpulse_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buildpulse -d buildpulse_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buildpulse_net
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: buildpulse_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ""
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - buildpulse_net
+
+  # ── Backend (Express API) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    container_name: buildpulse_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://buildpulse:password@postgres:5432/buildpulse_dev
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend/src:/app/src       # Hot reload source
+      - ./backend/prisma:/app/prisma # Prisma schema changes
+      - /app/node_modules             # Don't mount host node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - buildpulse_net
+
+  # ── Frontend (Vite React) ───────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: buildpulse_frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - buildpulse_net
+
+  # ── Nginx (Reverse Proxy) ───────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: buildpulse_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - buildpulse_net
+
+  # ── Redis Commander (Dev UI for Redis) ─────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: buildpulse_redis_ui
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - buildpulse_net
+    profiles:
+      - tools  # Only started with: docker compose --profile tools up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  buildpulse_net:
+    driver: bridge
