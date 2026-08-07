@@ -400,20 +400,6 @@ This structure improves scalability and maintainability.
 
 ---
 
-# 📸 Screenshots
-
-Add screenshots of:
-
-* Dashboard
-* Login Page
-* Repository Management
-* Analytics Dashboard
-* Pipeline Details
-* Leaderboard
-* Settings
-
----
-
 # 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome.
