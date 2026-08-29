@@ -192,8 +192,7 @@ The application follows a modular architecture that separates business logic, AP
       +--------------+--------------+
       |                             |
  Webhook Worker             Notification Worker
-                     |
-              AI Analysis Worker
+                     
 ```
 
 ---
